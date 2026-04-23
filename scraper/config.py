@@ -4,6 +4,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 OUTPUT_DIR = PROJECT_ROOT / "output"
 CSV_OUTPUT_DIR = OUTPUT_DIR / "csv"
 LOG_OUTPUT_DIR = OUTPUT_DIR / "logs"
+FINAL_OUTPUT_DIR = PROJECT_ROOT / "final"
 RUNTIME_DIR = PROJECT_ROOT / "runtime"
 BROWSER_EXECUTABLE_CANDIDATES = (
     Path(r"C:\Program Files\Google\Chrome\Application\chrome.exe"),
@@ -17,6 +18,11 @@ BROWSER_EXECUTABLE_CANDIDATES = (
 HOUZZ_OUTPUT_FILE = str(PROJECT_ROOT / "houzz_emails.csv")
 BBB_OUTPUT_FILE = str(PROJECT_ROOT / "bbb_emails.csv")
 OUTPUT_FILE = HOUZZ_OUTPUT_FILE
+
+HOUZZ_FINAL_OUTPUT_FILE = str(FINAL_OUTPUT_DIR / "houzz_high_quality_emails.csv")
+BBB_FINAL_OUTPUT_FILE = str(FINAL_OUTPUT_DIR / "bbb_high_quality_emails.csv")
+HOUZZ_FINAL_DETAIL_FILE = str(FINAL_OUTPUT_DIR / "houzz_high_quality_email_details.csv")
+BBB_FINAL_DETAIL_FILE = str(FINAL_OUTPUT_DIR / "bbb_high_quality_email_details.csv")
 
 HOUZZ_DETAIL_OUTPUT_FILE = str(CSV_OUTPUT_DIR / "houzz_results_detailed.csv")
 BBB_DETAIL_OUTPUT_FILE = str(CSV_OUTPUT_DIR / "bbb_results_detailed.csv")
@@ -80,6 +86,7 @@ GOOGLE_RESULT_LIMIT = 3
 DEFAULT_SEARCH_COUNTRY = "USA"
 
 MASTER_HEADERS = ["Email"]
+FINAL_DETAIL_HEADERS = ["Email", "Quality", "Reason", "Name", "Website", "Profile"]
 STATUS_HEADERS = ["profile_url", "status", "detail", "updated_at"]
 DETAIL_HEADERS = [
     "email",

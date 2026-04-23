@@ -1,5 +1,6 @@
 import asyncio
 import random
+import re
 from urllib.parse import parse_qs, urlencode, urljoin, urlparse, urlunparse
 
 from playwright_stealth import Stealth
@@ -11,6 +12,10 @@ from scraper.filters.email_filters import is_valid_email_candidate
 from scraper.sources.website_scraper import get_site_emails
 from scraper.storage.csv_storage import log_failure, record_status, write_detail_rows, write_master_rows
 from scraper.utils import merge_email_sources, normalize_external_url, unique_preserve_order
+
+
+def canonical_bbb_profile_url(url):
+    return re.sub(r"/addressId/\d+(?=/|$)", "", url or "").split("#", 1)[0].rstrip("/")
 
 
 def extract_bbb_profile_links(candidates):
@@ -28,7 +33,7 @@ def extract_bbb_profile_links(candidates):
 
         label = f"{link.get('text', '')} {link.get('aria', '')}".strip()
         if hostname.endswith("bbb.org") and "/profile/" in path and "/us/" in path and is_target_profile_url(absolute_url, label):
-            profile_links.append(absolute_url.split("#", 1)[0])
+            profile_links.append(canonical_bbb_profile_url(absolute_url))
 
     return unique_preserve_order(profile_links)
 
@@ -253,6 +258,7 @@ async def run_bbb_search(
     stats,
     max_pages=None,
     max_profiles=None,
+    retry_no_email=False,
 ):
     site_cache = {}
     main_page = await context.new_page()
@@ -282,7 +288,7 @@ async def run_bbb_search(
                 existing_status = status_map.get(profile_url, {})
                 previous_status = existing_status.get("status")
 
-                if previous_status in {"processed", "no_email"}:
+                if previous_status == "processed" or (previous_status == "no_email" and not retry_no_email):
                     stats["profiles_skipped"] += 1
                     continue
 

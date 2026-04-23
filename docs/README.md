@@ -24,6 +24,17 @@ Output rules:
 - Duplicate emails are skipped in each source master CSV.
 - Detail rows are unique per `email + profile URL`.
 - Profiles are processed only when they look contractor, construction, home-improvement, architecture, property, or real-estate related.
+- Final quality-filtered exports are written to `final/` after scraping, or manually with `--export-final-only`.
+
+Final export examples:
+
+```powershell
+.\.venv\Scripts\python.exe houzz_pro_scraper.py --source bbb --export-final-only
+```
+
+```powershell
+.\.venv\Scripts\python.exe houzz_pro_scraper.py --source houzz --export-final-only --quality-filter high
+```
 
 Project layout:
 

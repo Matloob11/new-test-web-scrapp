@@ -24,8 +24,21 @@ Or run a source directly:
 - `bbb_emails.csv` - clean BBB email list
 - `output/csv/*_results_detailed.csv` - detailed rows with quality scoring
 - `output/csv/*_scrape_status.csv` - resume/status tracking
+- `final/*_high_quality_emails.csv` - final quality-filtered client-ready emails
 
 Scraped emails, logs, browser profiles, and virtualenv files are ignored by Git.
+
+Export final files without scraping:
+
+```powershell
+.\.venv\Scripts\python.exe houzz_pro_scraper.py --source bbb --export-final-only
+```
+
+Choose quality levels:
+
+```powershell
+.\.venv\Scripts\python.exe houzz_pro_scraper.py --source houzz --export-final-only --quality-filter high
+```
 
 ## Setup
 

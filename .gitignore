@@ -10,3 +10,4 @@ output/csv/*.csv
 output/logs/*.csv
 output/csv/scraped_links.txt
 output/backup/
+final/*.csv

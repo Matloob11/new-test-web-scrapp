@@ -11,6 +11,7 @@ from scraper.sources.bbb_profile import run_bbb_search
 from scraper.sources.houzz_profile import process_profile
 from scraper.storage.csv_storage import (
     ensure_output_files,
+    export_final_emails,
     get_active_detail_output_file,
     get_active_output_file,
     load_existing_detail_keys,
@@ -54,6 +55,9 @@ async def run_scraper(
     skip_facebook=False,
     country=None,
     skip_google_fallback=False,
+    auto_export_final=True,
+    quality_filter=None,
+    retry_no_email=False,
 ):
     async with async_playwright() as p:
         source = normalize_source(source)
@@ -94,6 +98,7 @@ async def run_scraper(
                     stats,
                     max_pages=max_pages,
                     max_profiles=max_profiles,
+                    retry_no_email=retry_no_email,
                 )
             else:
                 print(f"[*] Google FB fallback country: {search_country}")
@@ -113,13 +118,28 @@ async def run_scraper(
                     skip_facebook=skip_facebook,
                     skip_google_fallback=skip_google_fallback,
                     search_country=search_country,
+                    retry_no_email=retry_no_email,
                 )
 
         write_statuses(status_map)
+        if auto_export_final:
+            export_result = export_final_emails(quality_filter)
+            print(f"[DONE] Final clean emails exported to {export_result['final_output_file']}")
+            print(f"[DONE] Final detail exported to {export_result['final_detail_file']}")
         await context.close()
         print_summary(stats)
         print(f"\n[DONE] Master data saved to {output_file}")
         print(f"[DONE] Detailed data saved to {detail_output_file}")
+
+
+def export_final_for_source(source, quality_filter=None):
+    source = normalize_source(source)
+    set_active_source(source)
+    ensure_output_files()
+    export_result = export_final_emails(quality_filter)
+    print(f"[DONE] Exported {export_result['count']} {source.upper()} emails")
+    print(f"[DONE] Final clean emails: {export_result['final_output_file']}")
+    print(f"[DONE] Final detail: {export_result['final_detail_file']}")
 
 
 async def run_houzz_search(
@@ -138,6 +158,7 @@ async def run_houzz_search(
     skip_facebook=False,
     skip_google_fallback=False,
     search_country=None,
+    retry_no_email=False,
 ):
     site_cache = {}
     facebook_cache = {}
@@ -163,7 +184,7 @@ async def run_houzz_search(
                 existing_status = status_map.get(pro_link, {})
                 previous_status = existing_status.get("status")
 
-                if previous_status in {"processed", "no_email"}:
+                if previous_status == "processed" or (previous_status == "no_email" and not retry_no_email):
                     stats["profiles_skipped"] += 1
                     continue
 
@@ -246,12 +267,26 @@ def parse_args():
     parser.add_argument("--skip-facebook", action="store_true", help="Do not check Facebook pages")
     parser.add_argument("--country", help="Country name for Google Facebook fallback, e.g. USA")
     parser.add_argument("--skip-google-fallback", action="store_true", help="Do not use Google to find missing Facebook pages")
+    parser.add_argument("--retry-no-email", action="store_true", help="Retry profiles previously marked no_email")
+    parser.add_argument("--no-final-export", action="store_true", help="Do not export final quality-filtered email CSV after scraping")
+    parser.add_argument("--export-final-only", action="store_true", help="Export final quality-filtered email CSV without scraping")
+    parser.add_argument(
+        "--quality-filter",
+        nargs="+",
+        choices=["high", "medium", "low"],
+        default=["high", "medium"],
+        help="Email qualities to include in final export",
+    )
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = parse_args()
     selected_source = normalize_source(args.source) if args.source else prompt_source()
+    if args.export_final_only:
+        export_final_for_source(selected_source, args.quality_filter)
+        raise SystemExit(0)
+
     default_label = "BBB" if selected_source == "bbb" else "Houzz"
     url_to_scrape = (args.url or input(f"Enter {default_label} Search URL: ").strip()).strip()
     if url_to_scrape:
@@ -265,6 +300,9 @@ if __name__ == "__main__":
                 skip_facebook=args.skip_facebook,
                 country=args.country,
                 skip_google_fallback=args.skip_google_fallback,
+                auto_export_final=not args.no_final_export,
+                quality_filter=args.quality_filter,
+                retry_no_email=args.retry_no_email,
             )
         )
     else:

@@ -6,11 +6,17 @@ from scraper.config import (
     CSV_OUTPUT_DIR,
     BBB_DETAIL_OUTPUT_FILE,
     BBB_FAIL_LOG_FILE,
+    BBB_FINAL_DETAIL_FILE,
+    BBB_FINAL_OUTPUT_FILE,
     BBB_OUTPUT_FILE,
     BBB_STATUS_FILE,
     DETAIL_HEADERS,
     DETAIL_OUTPUT_FILE,
     FAIL_LOG_FILE,
+    FINAL_DETAIL_HEADERS,
+    FINAL_OUTPUT_DIR,
+    HOUZZ_FINAL_DETAIL_FILE,
+    HOUZZ_FINAL_OUTPUT_FILE,
     HOUZZ_DETAIL_OUTPUT_FILE,
     HOUZZ_FAIL_LOG_FILE,
     HOUZZ_OUTPUT_FILE,
@@ -32,6 +38,8 @@ ACTIVE_PATHS = {
     "detail_output_file": HOUZZ_DETAIL_OUTPUT_FILE,
     "status_file": HOUZZ_STATUS_FILE,
     "fail_log_file": HOUZZ_FAIL_LOG_FILE,
+    "final_output_file": HOUZZ_FINAL_OUTPUT_FILE,
+    "final_detail_file": HOUZZ_FINAL_DETAIL_FILE,
 }
 
 
@@ -44,6 +52,8 @@ def get_source_paths(source="houzz"):
             "detail_output_file": BBB_DETAIL_OUTPUT_FILE,
             "status_file": BBB_STATUS_FILE,
             "fail_log_file": BBB_FAIL_LOG_FILE,
+            "final_output_file": BBB_FINAL_OUTPUT_FILE,
+            "final_detail_file": BBB_FINAL_DETAIL_FILE,
         }
 
     return {
@@ -52,6 +62,8 @@ def get_source_paths(source="houzz"):
         "detail_output_file": HOUZZ_DETAIL_OUTPUT_FILE,
         "status_file": HOUZZ_STATUS_FILE,
         "fail_log_file": HOUZZ_FAIL_LOG_FILE,
+        "final_output_file": HOUZZ_FINAL_OUTPUT_FILE,
+        "final_detail_file": HOUZZ_FINAL_DETAIL_FILE,
     }
 
 
@@ -74,6 +86,14 @@ def get_active_status_file():
 
 def get_active_fail_log_file():
     return ACTIVE_PATHS["fail_log_file"]
+
+
+def get_active_final_output_file():
+    return ACTIVE_PATHS["final_output_file"]
+
+
+def get_active_final_detail_file():
+    return ACTIVE_PATHS["final_detail_file"]
 
 
 def ensure_parent_dir(path):
@@ -130,6 +150,7 @@ def migrate_detail_csv_if_needed(path):
 def ensure_output_files():
     os.makedirs(CSV_OUTPUT_DIR, exist_ok=True)
     os.makedirs(LOG_OUTPUT_DIR, exist_ok=True)
+    os.makedirs(FINAL_OUTPUT_DIR, exist_ok=True)
     ensure_csv_header(get_active_output_file(), MASTER_HEADERS)
     ensure_csv_header(get_active_detail_output_file(), DETAIL_HEADERS)
     ensure_csv_header(get_active_status_file(), STATUS_HEADERS)
@@ -321,3 +342,55 @@ def write_master_rows(master_writer, master_file, unique_emails_all, valid_email
 
     master_file.flush()
     return master_rows_added, new_master_emails
+
+
+def export_final_emails(allowed_qualities=None):
+    allowed_qualities = set(allowed_qualities or ("high", "medium"))
+    detail_output_file = get_active_detail_output_file()
+    final_output_file = get_active_final_output_file()
+    final_detail_file = get_active_final_detail_file()
+
+    ensure_parent_dir(final_output_file)
+    ensure_parent_dir(final_detail_file)
+
+    rows = []
+    if os.path.exists(detail_output_file) and os.path.getsize(detail_output_file) > 0:
+        with open(detail_output_file, "r", encoding="utf-8", newline="") as file_obj:
+            rows = list(csv.DictReader(file_obj))
+
+    selected_by_email = {}
+    for row in rows:
+        email = (row.get("email") or "").strip().lower()
+        quality = (row.get("email_quality") or "").strip().lower()
+        if not email or quality not in allowed_qualities or not is_valid_email_candidate(email):
+            continue
+        if email in selected_by_email:
+            continue
+        selected_by_email[email] = {
+            "Email": email,
+            "Quality": quality,
+            "Reason": row.get("email_quality_reason", ""),
+            "Name": row.get("name", ""),
+            "Website": row.get("website", ""),
+            "Profile": row.get("houzz_profile", ""),
+        }
+
+    sorted_rows = [selected_by_email[email] for email in sorted(selected_by_email)]
+
+    with open(final_output_file, "w", encoding="utf-8", newline="") as file_obj:
+        writer = csv.writer(file_obj)
+        writer.writerow(MASTER_HEADERS)
+        for row in sorted_rows:
+            writer.writerow([row["Email"]])
+
+    with open(final_detail_file, "w", encoding="utf-8", newline="") as file_obj:
+        writer = csv.DictWriter(file_obj, fieldnames=FINAL_DETAIL_HEADERS)
+        writer.writeheader()
+        writer.writerows(sorted_rows)
+
+    return {
+        "count": len(sorted_rows),
+        "final_output_file": final_output_file,
+        "final_detail_file": final_detail_file,
+        "qualities": sorted(allowed_qualities),
+    }
