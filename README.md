@@ -40,6 +40,28 @@ Choose quality levels:
 .\.venv\Scripts\python.exe houzz_pro_scraper.py --source houzz --export-final-only --quality-filter high
 ```
 
+## Test and Debug
+
+Run the automated checks:
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+.\.venv\Scripts\python.exe -m compileall -q houzz_pro_scraper.py scraper tools tests
+```
+
+Validate export files without scraping:
+
+```powershell
+.\.venv\Scripts\python.exe houzz_pro_scraper.py --source bbb --export-final-only
+.\.venv\Scripts\python.exe houzz_pro_scraper.py --source houzz --export-final-only
+```
+
+Short BBB smoke test:
+
+```powershell
+.\.venv\Scripts\python.exe houzz_pro_scraper.py --source bbb --url "BBB_SEARCH_URL" --max-pages 1 --max-profiles 1 --no-final-export
+```
+
 ## Setup
 
 ```powershell

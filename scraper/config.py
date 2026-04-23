@@ -40,6 +40,12 @@ USER_DATA_DIR = str(RUNTIME_DIR / "user_data")
 
 EMAIL_REGEX = r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
 PLACEHOLDER_EMAIL_FRAGMENTS = ("user@domain.com", "email@address.com", "example@")
+PLACEHOLDER_EMAIL_DOMAINS = {
+    "example.com",
+    "example.org",
+    "example.net",
+    "test.com",
+}
 INVALID_EMAIL_TLDS = {
     "png",
     "jpg",

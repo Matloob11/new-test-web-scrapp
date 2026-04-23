@@ -1,0 +1,86 @@
+import csv
+import tempfile
+import unittest
+from pathlib import Path
+
+from scraper.config import DETAIL_HEADERS
+from scraper.storage import csv_storage
+
+
+class StorageExportTests(unittest.TestCase):
+    def test_export_final_emails_filters_quality_and_dedupes(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            detail_file = root / "details.csv"
+            final_file = root / "final.csv"
+            final_detail_file = root / "final_detail.csv"
+
+            with detail_file.open("w", newline="", encoding="utf-8") as file_obj:
+                writer = csv.DictWriter(file_obj, fieldnames=DETAIL_HEADERS)
+                writer.writeheader()
+                writer.writerows(
+                    [
+                        {
+                            "email": "high@examplebuilder.com",
+                            "name": "Example Builder",
+                            "houzz_profile": "profile-1",
+                            "website": "https://examplebuilder.com",
+                            "facebook": "",
+                            "sources": "website",
+                            "email_quality": "high",
+                            "email_quality_reason": "business_domain_generic_inbox",
+                            "saved_to_master_output": "1",
+                        },
+                        {
+                            "email": "high@examplebuilder.com",
+                            "name": "Example Builder Duplicate",
+                            "houzz_profile": "profile-2",
+                            "website": "https://examplebuilder.com",
+                            "facebook": "",
+                            "sources": "website",
+                            "email_quality": "high",
+                            "email_quality_reason": "business_domain_generic_inbox",
+                            "saved_to_master_output": "0",
+                        },
+                        {
+                            "email": "low@gmail.com",
+                            "name": "Low Quality",
+                            "houzz_profile": "profile-3",
+                            "website": "https://lowquality.com",
+                            "facebook": "",
+                            "sources": "website",
+                            "email_quality": "low",
+                            "email_quality_reason": "generic_free_email",
+                            "saved_to_master_output": "1",
+                        },
+                    ]
+                )
+
+            original_paths = dict(csv_storage.ACTIVE_PATHS)
+            try:
+                csv_storage.ACTIVE_PATHS.update(
+                    {
+                        "detail_output_file": str(detail_file),
+                        "final_output_file": str(final_file),
+                        "final_detail_file": str(final_detail_file),
+                        "fail_log_file": str(root / "failures.csv"),
+                    }
+                )
+                result = csv_storage.export_final_emails(["high"])
+            finally:
+                csv_storage.ACTIVE_PATHS.clear()
+                csv_storage.ACTIVE_PATHS.update(original_paths)
+
+            self.assertEqual(result["count"], 1)
+            with final_file.open(newline="", encoding="utf-8") as file_obj:
+                rows = list(csv.reader(file_obj))
+            self.assertEqual(rows, [["Email"], ["high@examplebuilder.com"]])
+
+            with final_detail_file.open(newline="", encoding="utf-8") as file_obj:
+                detail_rows = list(csv.DictReader(file_obj))
+            self.assertEqual(len(detail_rows), 1)
+            self.assertEqual(detail_rows[0]["Quality"], "high")
+
+
+if __name__ == "__main__":
+    unittest.main()

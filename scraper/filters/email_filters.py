@@ -1,7 +1,13 @@
 import re
 from urllib.parse import unquote
 
-from scraper.config import EMAIL_REGEX, INVALID_EMAIL_TLDS, PLACEHOLDER_EMAIL_FRAGMENTS, REJECT_EMAIL_DOMAINS
+from scraper.config import (
+    EMAIL_REGEX,
+    INVALID_EMAIL_TLDS,
+    PLACEHOLDER_EMAIL_DOMAINS,
+    PLACEHOLDER_EMAIL_FRAGMENTS,
+    REJECT_EMAIL_DOMAINS,
+)
 
 
 def find_emails(text):
@@ -39,6 +45,8 @@ def is_valid_email_candidate(email):
 
     local_part, domain = clean_email.rsplit("@", 1)
     if not local_part or not domain or "." not in domain:
+        return False
+    if domain in PLACEHOLDER_EMAIL_DOMAINS:
         return False
     if local_part.startswith(".") or local_part.endswith(".") or ".." in local_part:
         return False

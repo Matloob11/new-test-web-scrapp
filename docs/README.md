@@ -36,6 +36,19 @@ Final export examples:
 .\.venv\Scripts\python.exe houzz_pro_scraper.py --source houzz --export-final-only --quality-filter high
 ```
 
+Automated QA:
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+.\.venv\Scripts\python.exe -m compileall -q houzz_pro_scraper.py scraper tools tests
+```
+
+Short live smoke test:
+
+```powershell
+.\.venv\Scripts\python.exe houzz_pro_scraper.py --source bbb --url "BBB_SEARCH_URL" --max-pages 1 --max-profiles 1 --no-final-export
+```
+
 Project layout:
 
 - `houzz_pro_scraper.py` - root main file and CLI.
