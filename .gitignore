@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+**/__pycache__/
+runtime/user_data/
+*.pyc
+houzz_emails.csv
+bbb_emails.csv
+houzz_results.csv
+output/csv/*.csv
+output/logs/*.csv
+output/csv/scraped_links.txt
+output/backup/
