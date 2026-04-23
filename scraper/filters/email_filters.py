@@ -7,7 +7,9 @@ from scraper.config import (
     PLACEHOLDER_EMAIL_DOMAINS,
     PLACEHOLDER_EMAIL_FRAGMENTS,
     REJECT_EMAIL_DOMAINS,
+    STRICT_REJECT_LOCAL_FRAGMENTS,
 )
+
 
 
 def find_emails(text):
@@ -62,6 +64,11 @@ def is_valid_email_candidate(email):
         return False
     if re.search(r"@\d+x\.", clean_email):
         return False
+    
+    # Strict local part filtering (e.g., houzz@..., bbb@...)
+    if any(fragment in local_part for fragment in STRICT_REJECT_LOCAL_FRAGMENTS):
+        return False
+
 
     domain_labels = domain.split(".")
     if any(not label or label.startswith("-") or label.endswith("-") for label in domain_labels):

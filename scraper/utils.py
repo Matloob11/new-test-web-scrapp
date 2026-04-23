@@ -1,3 +1,4 @@
+import base64
 import re
 from urllib.parse import unquote, urlparse
 
@@ -50,3 +51,58 @@ def merge_email_sources(source_map, emails, source_name):
     for email in emails:
         clean_email = email.lower().strip()
         source_map.setdefault(clean_email, set()).add(source_name)
+
+
+def decode_houzz_trk_link(url):
+    """
+    Houzz tracking links often contain a base64-encoded URL or handle as the first segment after /trk/.
+    Example URL: https://www.houzz.com/trk/aHR0cDovL2duYnVpbGRlcnMuaG91enouY29t/...
+    Example Handle: https://www.houzz.com/trk/QHJqdGN1c3RvbWJ1aWxkZXJz/... (@rjtcustombuilders)
+    """
+    if not url or "/trk/" not in url:
+        return ""
+
+    try:
+        # Extract the segment immediately following /trk/
+        parts = url.split("/trk/")[1].split("/")
+        if not parts:
+            return ""
+
+        encoded_segment = parts[0]
+        # Quick check: if it's already a plain URL or handle, return it (unlikely but safe)
+        if encoded_segment.startswith("http") or encoded_segment.startswith("@"):
+            return encoded_segment
+
+        # Pad base64 if needed
+        missing_padding = len(encoded_segment) % 4
+        if missing_padding:
+            encoded_segment += "=" * (4 - missing_padding)
+
+        try:
+            decoded = base64.b64decode(encoded_segment).decode("utf-8", errors="ignore").strip()
+        except Exception:
+            return ""
+
+        if not decoded:
+            return ""
+
+        # Case 1: Decoded is a full URL
+        if decoded.startswith("http"):
+            return decoded
+        
+        # Case 2: Decoded is a domain (e.g., gnbuilders.houzz.com)
+        if "." in decoded and "/" not in decoded and " " not in decoded:
+            return f"https://{decoded}"
+            
+        # Case 3: Decoded is a Facebook handle (e.g., @rjtcustombuilders)
+        if decoded.startswith("@"):
+            handle = decoded.lstrip("@")
+            return f"https://www.facebook.com/{handle}"
+            
+        # Case 4: Decoded is a plain string that might be a Facebook handle (e.g., KBR Builders Inc)
+        # We only return this if it looks like a single word handle or we are in a Facebook context.
+        # But for now, let's stick to obvious ones to avoid false positives.
+        
+    except Exception:
+        pass
+    return ""

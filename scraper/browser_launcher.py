@@ -1,11 +1,5 @@
-from scraper.config import BROWSER_EXECUTABLE_CANDIDATES, USER_DATA_DIR
-
-
-USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/120.0.0.0 Safari/537.36"
-)
+import random
+from scraper.config import BROWSER_EXECUTABLE_CANDIDATES, USER_DATA_DIR, USER_AGENTS
 
 
 def find_browser_executable():
@@ -16,10 +10,15 @@ def find_browser_executable():
 
 
 async def launch_persistent_browser(playwright, headless=False):
+    # Pick a random User-Agent for rotation
+    selected_ua = random.choice(USER_AGENTS)
+    print(f"[*] Rotating User-Agent: {selected_ua[:50]}...")
+
     launch_options = {
         "headless": headless,
         "viewport": {"width": 1280, "height": 800},
-        "user_agent": USER_AGENT,
+        "user_agent": selected_ua,
+        "ignore_https_errors": True,
     }
 
     executable_path = find_browser_executable()

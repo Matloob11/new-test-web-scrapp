@@ -12,10 +12,16 @@ from scraper.storage.csv_storage import log_failure
 from scraper.utils import compact_whitespace, normalize_external_url
 
 
-def build_google_facebook_query(name, country):
+def build_google_facebook_query(name, location, country):
     clean_name = compact_whitespace(name)
+    clean_loc = compact_whitespace(location)
     clean_country = compact_whitespace(country) or DEFAULT_SEARCH_COUNTRY
-    return f'site:facebook.com "{clean_name}" fb in {clean_country}'
+    
+    query = f'site:facebook.com "{clean_name}"'
+    if clean_loc:
+        query += f' "{clean_loc}"'
+    query += f' fb in {clean_country}'
+    return query
 
 
 def extract_google_target_url(href):
@@ -86,14 +92,20 @@ def extract_google_facebook_candidates(links, name, country):
     return [url for _, url in ranked[:GOOGLE_RESULT_LIMIT]]
 
 
-async def get_google_facebook_candidates(context, name, country, profile_url="", google_cache=None):
+async def get_google_facebook_candidates(context, name, location, country, profile_url="", google_cache=None, logger=None):
+    def log(msg):
+        if logger:
+            logger(msg)
+        else:
+            print(msg)
     """Use Google as a fallback to discover likely Facebook pages for a pro name."""
     clean_name = compact_whitespace(name)
+    clean_loc = compact_whitespace(location)
     clean_country = compact_whitespace(country) or DEFAULT_SEARCH_COUNTRY
     if not clean_name:
         return [], False
 
-    query = build_google_facebook_query(clean_name, clean_country)
+    query = build_google_facebook_query(clean_name, clean_loc, clean_country)
     cache_key = query.lower()
     if google_cache is not None and cache_key in google_cache:
         cached_candidates, cached_error = google_cache[cache_key]
@@ -106,13 +118,13 @@ async def get_google_facebook_candidates(context, name, country, profile_url="",
 
     try:
         search_url = f"https://www.google.com/search?q={quote_plus(query)}"
-        print(f"  [~] Google FB search: {query}")
+        log(f"  [~] Google FB search: {query}")
         try:
             await goto_with_retry(page, search_url, "google_facebook_search", timeout_ms=GOOGLE_TIMEOUT_MS)
         except Exception as exc:
             had_error = True
             log_failure("google_facebook_search", search_url, exc, profile_url)
-            print(f"  [!] Google FB search error ({clean_name}): {exc}")
+            log(f"  [!] Google FB search error ({clean_name}): {exc}")
             return candidates, had_error
 
         await asyncio.sleep(random.uniform(1.5, 2.5))
@@ -120,7 +132,7 @@ async def get_google_facebook_candidates(context, name, country, profile_url="",
         had_error = had_error or link_error
         candidates = extract_google_facebook_candidates(links, clean_name, clean_country)
         if candidates:
-            print(f"  [~] Google FB candidate: {candidates[0]}")
+            log(f"  [~] Google FB candidate found: {candidates[0]}")
     finally:
         await page.close()
 

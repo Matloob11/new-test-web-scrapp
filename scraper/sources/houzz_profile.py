@@ -98,13 +98,25 @@ async def process_profile(
     allow_facebook=True,
     allow_google_fallback=True,
     country=DEFAULT_SEARCH_COUNTRY,
+    logger=None,
 ):
-    print(f"\n[+] Professional: {pro_link}")
+    def log(msg):
+        if logger:
+            logger(msg)
+        else:
+            print(msg)
+
+    log(f"\n[+] Professional: {pro_link}")
     pro_page = await context.new_page()
     await Stealth().apply_stealth_async(pro_page)
 
     try:
-        await goto_with_retry(pro_page, pro_link, "profile_page", timeout_ms=PROFILE_TIMEOUT_MS)
+        response = await goto_with_retry(pro_page, pro_link, "profile_page", timeout_ms=PROFILE_TIMEOUT_MS)
+        if response and response.status == 404:
+            log(f"    [!] Profile not found (404): {pro_link}")
+            record_status(status_map, pro_link, "no_email", "profile_404")
+            return {"status": "no_email", "master_saved": 0, "detail_saved": 0}
+
         await asyncio.sleep(random.uniform(2.0, 4.0))
 
         name = ""
@@ -118,13 +130,31 @@ async def process_profile(
         profile_errors = []
         email_sources = {}
 
+        location = ""
+        try:
+            # Enhanced location extraction with multiple selector candidates
+            loc_selectors = [
+                ".profile-about__city-state",
+                "[itemprop='addressLocality']",
+                ".profile-about__info-item span",
+                "span.hz-pro-search-result__location"
+            ]
+            for selector in loc_selectors:
+                loc_el = await pro_page.query_selector(selector)
+                if loc_el:
+                    location = (await loc_el.inner_text()).strip()
+                    if location:
+                        break
+        except Exception:
+            pass
+
         try:
             profile_text_sample = (await pro_page.locator("body").inner_text(timeout=5000))[:1500]
         except Exception:
             profile_text_sample = ""
 
         if not is_target_business_text(pro_link, name, profile_text_sample):
-            print(f"    [skip] Not contractor/real-estate related: {name}")
+            log(f"    [skip] Not contractor/real-estate related: {name}")
             record_status(status_map, pro_link, "no_email", "source=houzz; skipped_non_target_business")
             return {"status": "no_email", "master_saved": 0, "detail_saved": 0}
 
@@ -167,17 +197,20 @@ async def process_profile(
             if cleaned_facebook_url:
                 facebook_final = cleaned_facebook_url
             else:
-                print(f"    [~] Ignoring generic/non-profile Facebook link: {facebook_final}")
+                log(f"    [~] Ignoring generic/non-profile Facebook link: {facebook_final}")
                 facebook_final = ""
 
-        print(f"    Name: {name}")
-        print(f"    Website: {website_final}")
-        print(f"    Facebook: {facebook_final}")
+        log(f"    Name: {name}")
+        if location:
+            log(f"    Location: {location}")
+        log(f"    Website: {website_final}")
+        log(f"    Facebook: {facebook_final}")
         facebook_checked = False
         google_facebook_checked = False
         google_facebook_candidates = []
 
         if website_final:
+            log(f"    [~] Checking Website: {website_final}")
             site_emails, site_error = await get_site_emails(context, website_final, pro_link, site_cache)
             merge_email_sources(email_sources, site_emails, "website")
             if site_error:
@@ -185,36 +218,46 @@ async def process_profile(
 
         valid_emails = {email for email in email_sources if is_valid_email_candidate(email)}
 
-        if allow_facebook and allow_google_fallback and name and not facebook_final and not valid_emails:
-            google_facebook_checked = True
-            google_facebook_candidates, google_error = await get_google_facebook_candidates(
-                context,
-                name,
-                country,
-                profile_url=pro_link,
-                google_cache=google_cache,
-            )
-            if google_error:
-                profile_errors.append("google_facebook_search")
-            if google_facebook_candidates:
-                facebook_final = google_facebook_candidates[0]
-                print(f"    Google Facebook: {facebook_final}")
-
-        facebook_urls_to_check = []
-        if facebook_final:
-            facebook_urls_to_check.append(facebook_final)
-        facebook_urls_to_check.extend(google_facebook_candidates)
-
-        for facebook_url in unique_preserve_order(facebook_urls_to_check):
-            if not allow_facebook or valid_emails:
-                break
-            facebook_checked = True
-            fb_emails, fb_error = await get_facebook_emails(context, facebook_url, pro_link, facebook_cache)
+        # 1. Try the Facebook link found directly on the profile
+        if allow_facebook and not valid_emails and facebook_final:
+            log(f"    [~] Checking Profile Facebook: {facebook_final}")
+            fb_emails, fb_error = await get_facebook_emails(context, facebook_final, pro_link, facebook_cache, logger=logger)
             merge_email_sources(email_sources, fb_emails, "facebook")
             if fb_error:
                 profile_errors.append("facebook_lookup")
-            facebook_final = facebook_url
             valid_emails = {email for email in email_sources if is_valid_email_candidate(email)}
+
+        # 2. If still no emails, try Google Fallback
+        if allow_facebook and allow_google_fallback and name and not valid_emails:
+            google_facebook_checked = True
+            log("    [!] No email found yet. Searching Google for location-based Facebook profiles...")
+            google_facebook_candidates, google_error = await get_google_facebook_candidates(
+                context,
+                name,
+                location,
+                country,
+                profile_url=pro_link,
+                google_cache=google_cache,
+                logger=logger,
+            )
+            if google_error:
+                profile_errors.append("google_facebook_search")
+            
+            if google_facebook_candidates:
+                log(f"    [+] Google found {len(google_facebook_candidates)} candidate(s). Checking them...")
+                for facebook_url in unique_preserve_order(google_facebook_candidates):
+                    if valid_emails:
+                        break
+                    facebook_checked = True
+                    fb_emails, fb_error = await get_facebook_emails(context, facebook_url, pro_link, facebook_cache, logger=logger)
+                    merge_email_sources(email_sources, fb_emails, "facebook_fallback")
+                    if fb_error:
+                        profile_errors.append("facebook_fallback_lookup")
+                    # Update facebook_final to reflect the source of the email
+                    facebook_final = facebook_url
+                    valid_emails = {email for email in email_sources if is_valid_email_candidate(email)}
+            else:
+                log("    [-] Google search yielded no relevant Facebook candidates.")
 
         valid_emails = {email for email in email_sources if is_valid_email_candidate(email)}
         detail_rows_added = 0
@@ -255,21 +298,25 @@ async def process_profile(
                 "detail_saved": detail_rows_added,
             }
 
-        if warning_tags:
-            record_status(status_map, pro_link, "failed", f"no_email; warnings={','.join(warning_tags)}")
-            return {"status": "failed", "master_saved": 0, "detail_saved": 0}
-
-        checked_steps = ["profile", "website"]
+        # If we reached here, no emails were found.
+        # We only mark as 'failed' if there were warnings AND we didn't finish the fallback check.
+        # But since we currently always try to finish fallback, we'll mark as 'no_email' 
+        # to avoid infinite retries of profiles with broken website links.
+        checked_steps = ["profile"]
+        if website_final:
+            checked_steps.append("website")
         if google_facebook_checked:
-            checked_steps.append("google_facebook")
+            checked_steps.append("google_fallback")
         if facebook_checked:
             checked_steps.append("facebook")
-        record_status(status_map, pro_link, "no_email", f"checked_{'_'.join(checked_steps)}")
+
+        status_msg = f"checked_{'_'.join(checked_steps)}{warning_text}"
+        record_status(status_map, pro_link, "no_email", status_msg)
         return {"status": "no_email", "master_saved": 0, "detail_saved": 0}
     except Exception as exc:
         log_failure("profile_processing", pro_link, exc, pro_link)
         record_status(status_map, pro_link, "failed", str(exc))
-        print(f"    [!] Error processing profile: {exc}")
+        log(f"    [!] Error processing profile: {exc}")
         return {"status": "failed", "master_saved": 0, "detail_saved": 0}
     finally:
         await pro_page.close()

@@ -58,7 +58,10 @@ async def run_scraper(
     auto_export_final=True,
     quality_filter=None,
     retry_no_email=False,
+    logger=print,
+    stop_event=None,
 ):
+
     async with async_playwright() as p:
         source = normalize_source(source)
         set_active_source(source)
@@ -81,8 +84,9 @@ async def run_scraper(
             master_writer = csv.writer(master_file)
             detail_writer = csv.writer(detail_file)
 
-            print(f"\n[*] Starting Search: {input_url}")
-            print(f"[*] Source: {source.upper()}")
+            logger(f"[*] Starting Search: {input_url}")
+            logger(f"[*] Source: {source.upper()}")
+
 
             if source == "bbb":
                 await run_bbb_search(
@@ -99,6 +103,7 @@ async def run_scraper(
                     max_pages=max_pages,
                     max_profiles=max_profiles,
                     retry_no_email=retry_no_email,
+                    stop_event=stop_event,
                 )
             else:
                 print(f"[*] Google FB fallback country: {search_country}")
@@ -119,7 +124,10 @@ async def run_scraper(
                     skip_google_fallback=skip_google_fallback,
                     search_country=search_country,
                     retry_no_email=retry_no_email,
+                    logger=logger,
+                    stop_event=stop_event,
                 )
+
 
         write_statuses(status_map)
         if auto_export_final:
@@ -159,7 +167,10 @@ async def run_houzz_search(
     skip_google_fallback=False,
     search_country=None,
     retry_no_email=False,
+    logger=print,
+    stop_event=None,
 ):
+
     site_cache = {}
     facebook_cache = {}
     google_cache = {}
@@ -168,29 +179,22 @@ async def run_houzz_search(
     await Stealth().apply_stealth_async(main_page)
 
     try:
-        await main_page.goto(input_url, wait_until="domcontentloaded")
-
-        page_count = 1
-        stop_requested = False
-
-        while True:
-            print(f"\n--- Houzz Search Page {page_count} ---")
-            links = await main_page.eval_on_selector_all("a.hz-pro-ctl", "elements => elements.map(el => el.href)")
-            unique_links = unique_preserve_order(links)
-
-            print(f"Found {len(unique_links)} professionals.")
-
-            for pro_link in unique_links:
+        from scraper.config import CONCURRENT_PROFILES, PROFILE_TIMEOUT_MS
+        from scraper.browser_helpers import goto_with_retry
+        
+        semaphore = asyncio.Semaphore(CONCURRENT_PROFILES)
+        
+        async def profile_worker(pro_link):
+            async with semaphore:
+                # Add a small staggered start to avoid hitting the server with all workers at once
+                await asyncio.sleep(random.uniform(1.0, 3.0))
+                
                 existing_status = status_map.get(pro_link, {})
                 previous_status = existing_status.get("status")
 
                 if previous_status == "processed" or (previous_status == "no_email" and not retry_no_email):
                     stats["profiles_skipped"] += 1
-                    continue
-
-                if max_profiles and stats["profiles_attempted"] >= max_profiles:
-                    stop_requested = True
-                    break
+                    return
 
                 if previous_status == "failed":
                     print(f"\n[~] Retrying failed profile: {pro_link}")
@@ -213,11 +217,40 @@ async def run_houzz_search(
                     allow_facebook=not skip_facebook,
                     allow_google_fallback=not skip_google_fallback,
                     country=search_country,
+                    logger=logger,
                 )
 
                 stats[result["status"]] += 1
                 stats["master_saved"] += result["master_saved"]
                 stats["detail_saved"] += result["detail_saved"]
+
+        await goto_with_retry(main_page, input_url, "houzz_search_init", timeout_ms=PROFILE_TIMEOUT_MS)
+
+        page_count = 1
+        stop_requested = False
+
+        while True:
+            logger(f"\n--- Houzz Search Page {page_count} ---")
+            links = await main_page.eval_on_selector_all("a.hz-pro-ctl", "elements => elements.map(el => el.href)")
+            unique_links = unique_preserve_order(links)
+
+            logger(f"Found {len(unique_links)} professionals.")
+
+            tasks = []
+            for pro_link in unique_links:
+                if stop_event and stop_event.is_set():
+                    logger("[!] Stop signal received. Finishing up...")
+                    stop_requested = True
+                    break
+
+                if max_profiles and stats["profiles_attempted"] >= max_profiles:
+                    stop_requested = True
+                    break
+                
+                tasks.append(asyncio.create_task(profile_worker(pro_link)))
+
+            if tasks:
+                await asyncio.gather(*tasks)
 
             if stop_requested:
                 print("\n[*] Reached max profile limit.")

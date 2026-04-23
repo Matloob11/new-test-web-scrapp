@@ -52,8 +52,13 @@ def build_facebook_about_url(facebook_url):
     return facebook_url.rstrip("/") + "/about"
 
 
-async def get_facebook_emails(context, url, profile_url="", facebook_cache=None):
+async def get_facebook_emails(context, url, profile_url="", facebook_cache=None, logger=None):
     """Visit a Facebook page/about page and pull visible emails."""
+    def log(msg):
+        if logger:
+            logger(msg)
+        else:
+            print(msg)
     normalized_url = normalize_facebook_candidate_url(url)
     if not normalized_url:
         return set(), False
@@ -70,13 +75,13 @@ async def get_facebook_emails(context, url, profile_url="", facebook_cache=None)
     await Stealth().apply_stealth_async(page)
 
     try:
-        print(f"  [~] Checking Facebook: {about_url}")
+        log(f"  [~] Checking Facebook: {about_url}")
         try:
             await goto_with_retry(page, about_url, "facebook_about", timeout_ms=FACEBOOK_TIMEOUT_MS)
         except Exception as exc:
             had_error = True
             log_failure("facebook_about", about_url, exc, profile_url)
-            print(f"  [!] FB scraping error ({about_url}): {exc}")
+            log(f"  [!] FB scraping error ({about_url}): {exc}")
             return emails, had_error
 
         await asyncio.sleep(random.uniform(2.0, 3.0))
