@@ -1,66 +1,26 @@
-# Web Lead Scraper
+# STONIX Web Lead Scraper (earlier tree)
 
-Python Playwright scraper for collecting contractor and real-estate related emails from Houzz and BBB.
+Playwright scraper for contractor and real-estate emails on **Houzz** and **BBB**, plus a CustomTkinter desktop window titled **STONIX - Web Lead Scraper Pro**.
 
-## Run
+This is the earlier cousin of [web-lead-scrapper](https://github.com/Matloob11/web-lead-scrapper). It has the same CLI story. It does **not** include the later Qt `desktop_app/`, Supabase device gate, or SMTP outreach page.
 
-```powershell
-.\.venv\Scripts\python.exe houzz_pro_scraper.py
-```
+## Features
 
-Or run a source directly:
+- Source: Houzz or BBB URL
+- Max pages / max profiles
+- Headless Chromium
+- Skip Facebook / Google fallback
+- Retry profiles that had no email
+- Export a final CSV
+- Live log in the GUI (`gui_app.py`)
 
-```powershell
-.\.venv\Scripts\python.exe houzz_pro_scraper.py --source houzz --url "HOUZZ_SEARCH_URL"
-```
+## Stack
 
-```powershell
-.\.venv\Scripts\python.exe houzz_pro_scraper.py --source bbb --url "BBB_SEARCH_URL"
-```
+- Python 3.11-class tooling
+- Playwright + stealth
+- CustomTkinter GUI
 
-## Output
-
-- `houzz_emails.csv` - clean Houzz email list
-- `bbb_emails.csv` - clean BBB email list
-- `output/csv/*_results_detailed.csv` - detailed rows with quality scoring
-- `output/csv/*_scrape_status.csv` - resume/status tracking
-- `final/*_high_quality_emails.csv` - final quality-filtered client-ready emails
-
-Scraped emails, logs, browser profiles, and virtualenv files are ignored by Git.
-
-Export final files without scraping:
-
-```powershell
-.\.venv\Scripts\python.exe houzz_pro_scraper.py --source bbb --export-final-only
-```
-
-Choose quality levels:
-
-```powershell
-.\.venv\Scripts\python.exe houzz_pro_scraper.py --source houzz --export-final-only --quality-filter high
-```
-
-## Test and Debug
-
-Run the automated checks:
-
-```powershell
-.\.venv\Scripts\python.exe -m unittest discover -s tests -v
-.\.venv\Scripts\python.exe -m compileall -q houzz_pro_scraper.py scraper tools tests
-```
-
-Validate export files without scraping:
-
-```powershell
-.\.venv\Scripts\python.exe houzz_pro_scraper.py --source bbb --export-final-only
-.\.venv\Scripts\python.exe houzz_pro_scraper.py --source houzz --export-final-only
-```
-
-Short BBB smoke test:
-
-```powershell
-.\.venv\Scripts\python.exe houzz_pro_scraper.py --source bbb --url "BBB_SEARCH_URL" --max-pages 1 --max-profiles 1 --no-final-export
-```
+No `.env.example`. No access-control module.
 
 ## Setup
 
@@ -70,8 +30,35 @@ python -m venv .venv
 .\.venv\Scripts\playwright.exe install chromium
 ```
 
-Manual browser/VPN setup:
+## Run
+
+CLI:
 
 ```powershell
-.\.venv\Scripts\python.exe tools\open_browser.py --url "https://www.bbb.org/"
+.\.venv\Scripts\python.exe houzz_pro_scraper.py --source houzz --url "https://www.houzz.com/..."
 ```
+
+Useful flags from the script: `--export-final-only`, `--quality-filter high`.
+
+GUI:
+
+```powershell
+.\.venv\Scripts\python.exe gui_app.py
+```
+
+Respect Houzz/BBB terms of use. This tool is for your own research, not for hammering their sites.
+
+## Layout
+
+```text
+houzz_pro_scraper.py
+gui_app.py
+scraper/
+setup/requirements.txt
+output/   final/
+tests/
+```
+
+## License
+
+See the repository.
